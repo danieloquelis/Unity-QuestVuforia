@@ -17,7 +17,7 @@ MonoBehaviour:
   handTrackingSupport: 0
   handTrackingFrequency: 0
   handTrackingVersion: 0
-  anchorSupport: 0
+  anchorSupport: 1
   sharedAnchorSupport: 0
   renderModelSupport: 0
   trackedKeyboardSupport: 0
@@ -26,7 +26,7 @@ MonoBehaviour:
   eyeTrackingSupport: 0
   virtualKeyboardSupport: 0
   colocationSessionSupport: 0
-  sceneSupport: 0
+  sceneSupport: 2
   boundaryVisibilitySupport: 0
   disableBackups: 1
   enableNSCConfig: 1
@@ -42,7 +42,7 @@ MonoBehaviour:
   experimentalFeaturesEnabled: 0
   insightPassthroughEnabled: 0
   _insightPassthroughSupport: 1
-  isPassthroughCameraAccessEnabled: 0
+  isPassthroughCameraAccessEnabled: 1
   _processorFavor: 0
   systemSplashScreen: {fileID: 0}
   systemSplashScreenType: 0
