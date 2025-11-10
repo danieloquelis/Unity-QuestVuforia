@@ -2,7 +2,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
 }
 
 android {
@@ -22,16 +22,29 @@ android {
     defaultConfig {
         minSdk getProperty("unity.minSdkVersion") as int
         targetSdk getProperty("unity.targetSdkVersion") as int
-        
+
         ndk {
-            abiFilters.addAll(getProperty("unity.abiFilters").tokenize(','))
+            abiFilters 'arm64-v8a'
             debugSymbolLevel getProperty("unity.debugSymbolLevel")
         }
-        
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+
         versionCode getProperty("unity.versionCode") as int
         versionName getProperty("unity.versionName")
-        
+
         consumerProguardFiles "consumer-rules.pro"
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
     }
     
     buildTypes {
