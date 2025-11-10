@@ -2,6 +2,7 @@
   "dependencies": {
     "com.meta.xr.mrutilitykit": "81.0.0",
     "com.meta.xr.sdk.core": "81.0.0",
+    "com.ptc.vuforia.engine": "file:com.ptc.vuforia.engine-11.4.4.tgz",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.10.0",
     "com.unity.ide.rider": "3.0.38",
@@ -15,6 +16,7 @@
     "com.unity.ugui": "2.0.0",
     "com.unity.visualscripting": "1.9.7",
     "com.unity.xr.management": "4.5.3",
+    "com.unity.xr.meta-openxr": "2.3.0",
     "com.unity.xr.openxr": "1.15.1",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.ai": "1.0.0",

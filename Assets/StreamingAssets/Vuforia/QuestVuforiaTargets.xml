@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<QCARConfig>
+  <Tracking>
+    <ImageTarget name="spiderman-target" size="0.149000 0.210007" />
+    <ImageTarget name="green-goblin-target" size="0.149000 0.210007" />
+  </Tracking>
+</QCARConfig>

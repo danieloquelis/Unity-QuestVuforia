@@ -1,258 +1,177 @@
 #include <jni.h>
 #include <android/log.h>
-#include "vuforia_engine_wrapper.h"
-#include "image_target_tracker.h"
-#include "model_target_tracker.h"
+#include "vuforia_driver.h"
 
-#define LOG_TAG "QuestVuforia"
+#define LOG_TAG "QuestVuforiaJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-static ImageTargetTracker* g_imageTargetTracker = nullptr;
-static ModelTargetTracker* g_modelTargetTracker = nullptr;
+/**
+ * JNI Bridge for Vuforia Driver Framework
+ *
+ * This bridge provides methods for feeding camera frames and device poses
+ * to the Vuforia Driver Framework. The actual Vuforia initialization and
+ * target tracking is handled by the Vuforia Unity SDK.
+ *
+ * Key differences from old architecture:
+ * - No direct Vuforia Engine initialization (handled by Unity SDK)
+ * - No Image/Model Target management (handled by Unity SDK)
+ * - Focus on frame/pose feeding to the Driver
+ */
 
 extern "C" {
 
+/**
+ * Feed camera frame to the Vuforia Driver
+ * Called from Kotlin layer when a new frame is available
+ */
 JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeInitialize(
-    JNIEnv* env, jobject thiz, jstring licenseKey) {
-
-    const char* key = env->GetStringUTFChars(licenseKey, nullptr);
-    if (!key) {
-        LOGE("Failed to get license key");
-        return JNI_FALSE;
-    }
-
-    JavaVM* javaVM = nullptr;
-    env->GetJavaVM(&javaVM);
-
-    jobject activity = env->NewGlobalRef(thiz);
-
-    auto& wrapper = VuforiaEngineWrapper::getInstance();
-    bool success = wrapper.initialize(key, javaVM, activity);
-
-    env->ReleaseStringUTFChars(licenseKey, key);
-
-    if (success) {
-        VuEngine* engine = wrapper.getEngine();
-        g_imageTargetTracker = new ImageTargetTracker(engine);
-        g_modelTargetTracker = new ModelTargetTracker(engine);
-        LOGI("Native initialization successful");
-    }
-
-    return success ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT void JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeShutdown(JNIEnv* env, jobject thiz) {
-    if (g_imageTargetTracker) {
-        delete g_imageTargetTracker;
-        g_imageTargetTracker = nullptr;
-    }
-
-    if (g_modelTargetTracker) {
-        delete g_modelTargetTracker;
-        g_modelTargetTracker = nullptr;
-    }
-
-    VuforiaEngineWrapper::getInstance().shutdown();
-    LOGI("Native shutdown complete");
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeProcessFrame(
-    JNIEnv* env, jobject thiz, jbyteArray imageData, jint width, jint height,
+Java_com_quforia_QuestVuforiaManager_nativeFeedCameraFrame(
+    JNIEnv* env, jobject thiz,
+    jbyteArray imageData, jint width, jint height,
     jfloatArray intrinsicsArray, jlong timestamp) {
 
+    (void)thiz;  // Unused JNI parameter
+    LOGD("nativeFeedCameraFrame: %dx%d, timestamp=%lld", width, height, (long long)timestamp);
+
+    if (!g_driverInstance) {
+        LOGE("Driver not initialized");
+        return JNI_FALSE;
+    }
+
     if (!imageData || !intrinsicsArray) {
+        LOGE("Null image data or intrinsics");
         return JNI_FALSE;
     }
 
+    // Get image data
     jbyte* imageBytes = env->GetByteArrayElements(imageData, nullptr);
-    jfloat* intrinsics = env->GetFloatArrayElements(intrinsicsArray, nullptr);
-
-    if (!imageBytes || !intrinsics) {
-        if (imageBytes) env->ReleaseByteArrayElements(imageData, imageBytes, JNI_ABORT);
-        if (intrinsics) env->ReleaseFloatArrayElements(intrinsicsArray, intrinsics, JNI_ABORT);
+    if (!imageBytes) {
+        LOGE("Failed to get image bytes");
         return JNI_FALSE;
     }
 
-    VuCameraIntrinsics vuIntrinsics;
-    vuIntrinsics.size.data[0] = intrinsics[0];
-    vuIntrinsics.size.data[1] = intrinsics[1];
-    vuIntrinsics.focalLength.data[0] = intrinsics[2];
-    vuIntrinsics.focalLength.data[1] = intrinsics[3];
-    vuIntrinsics.principalPoint.data[0] = intrinsics[4];
-    vuIntrinsics.principalPoint.data[1] = intrinsics[5];
-    vuIntrinsics.distortionMode = VU_CAMERA_DISTORTION_MODE_LINEAR;
-
-    for (int i = 0; i < 8; i++) {
-        vuIntrinsics.distortionParameters.data[i] = (i < 6) ? intrinsics[6 + i] : 0.0f;
+    // Get intrinsics
+    jfloat* intrinsics = env->GetFloatArrayElements(intrinsicsArray, nullptr);
+    if (!intrinsics) {
+        LOGE("Failed to get intrinsics");
+        env->ReleaseByteArrayElements(imageData, imageBytes, JNI_ABORT);
+        return JNI_FALSE;
     }
 
-    bool result = VuforiaEngineWrapper::getInstance().processFrame(
+    // Feed frame to driver
+    g_driverInstance->feedCameraFrame(
         reinterpret_cast<const uint8_t*>(imageBytes),
-        width, height, 0, vuIntrinsics, timestamp
+        width, height, intrinsics, timestamp
     );
 
+    // Release arrays
     env->ReleaseByteArrayElements(imageData, imageBytes, JNI_ABORT);
     env->ReleaseFloatArrayElements(intrinsicsArray, intrinsics, JNI_ABORT);
 
-    return result ? JNI_TRUE : JNI_FALSE;
+    return JNI_TRUE;
 }
 
+/**
+ * Feed device pose to the Vuforia Driver
+ * Called from Kotlin layer for every frame to provide 6DoF tracking
+ * CRITICAL: Must be called BEFORE feedCameraFrame with same timestamp
+ */
 JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeLoadImageTargetDatabase(
-    JNIEnv* env, jobject thiz, jstring databasePath) {
+Java_com_quforia_QuestVuforiaManager_nativeFeedDevicePose(
+    JNIEnv* env, jobject thiz,
+    jfloatArray positionArray, jfloatArray rotationArray, jlong timestamp) {
 
-    if (!g_imageTargetTracker) {
-        LOGE("Image target tracker not initialized");
+    (void)thiz;  // Unused JNI parameter
+    LOGD("nativeFeedDevicePose: timestamp=%lld", (long long)timestamp);
+
+    if (!g_driverInstance) {
+        LOGE("Driver not initialized");
         return JNI_FALSE;
     }
 
-    const char* path = env->GetStringUTFChars(databasePath, nullptr);
-    bool result = g_imageTargetTracker->loadDatabase(path);
-    env->ReleaseStringUTFChars(databasePath, path);
-
-    return result ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeCreateImageTarget(
-    JNIEnv* env, jobject thiz, jstring targetName) {
-
-    if (!g_imageTargetTracker) {
-        LOGE("Image target tracker not initialized");
+    if (!positionArray || !rotationArray) {
+        LOGE("Null position or rotation");
         return JNI_FALSE;
     }
 
-    const char* name = env->GetStringUTFChars(targetName, nullptr);
-    bool result = g_imageTargetTracker->createTargetObserver(name);
-    env->ReleaseStringUTFChars(targetName, name);
+    // Get position (x, y, z)
+    jfloat* position = env->GetFloatArrayElements(positionArray, nullptr);
+    if (!position) {
+        LOGE("Failed to get position");
+        return JNI_FALSE;
+    }
 
-    return result ? JNI_TRUE : JNI_FALSE;
+    // Get rotation quaternion (x, y, z, w)
+    jfloat* rotation = env->GetFloatArrayElements(rotationArray, nullptr);
+    if (!rotation) {
+        LOGE("Failed to get rotation");
+        env->ReleaseFloatArrayElements(positionArray, position, JNI_ABORT);
+        return JNI_FALSE;
+    }
+
+    // Feed pose to driver
+    g_driverInstance->feedDevicePose(position, rotation, timestamp);
+
+    // Release arrays
+    env->ReleaseFloatArrayElements(positionArray, position, JNI_ABORT);
+    env->ReleaseFloatArrayElements(rotationArray, rotation, JNI_ABORT);
+
+    return JNI_TRUE;
 }
 
-JNIEXPORT void JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeDestroyImageTarget(
-    JNIEnv* env, jobject thiz, jstring targetName) {
+/**
+ * Set camera intrinsics (called once at initialization)
+ * Intrinsics are cached and used for all frames
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_quforia_QuestVuforiaManager_nativeSetCameraIntrinsics(
+    JNIEnv* env, jobject thiz, jfloatArray intrinsicsArray) {
 
-    if (!g_imageTargetTracker) return;
+    (void)thiz;  // Unused JNI parameter
+    LOGI("nativeSetCameraIntrinsics");
 
-    const char* name = env->GetStringUTFChars(targetName, nullptr);
-    g_imageTargetTracker->destroyTargetObserver(name);
-    env->ReleaseStringUTFChars(targetName, name);
+    if (!g_driverInstance) {
+        LOGE("Driver not initialized");
+        return JNI_FALSE;
+    }
+
+    if (!intrinsicsArray) {
+        LOGE("Null intrinsics");
+        return JNI_FALSE;
+    }
+
+    // Get intrinsics array
+    jfloat* intrinsics = env->GetFloatArrayElements(intrinsicsArray, nullptr);
+    if (!intrinsics) {
+        LOGE("Failed to get intrinsics");
+        return JNI_FALSE;
+    }
+
+    // Set intrinsics in driver
+    g_driverInstance->setCameraIntrinsics(intrinsics);
+
+    LOGI("Camera intrinsics set: %.0fx%.0f, fx=%.2f, fy=%.2f, cx=%.2f, cy=%.2f",
+         intrinsics[0], intrinsics[1], intrinsics[2], intrinsics[3],
+         intrinsics[4], intrinsics[5]);
+
+    // Release array
+    env->ReleaseFloatArrayElements(intrinsicsArray, intrinsics, JNI_ABORT);
+
+    return JNI_TRUE;
 }
 
-JNIEXPORT jobjectArray JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeGetImageTargetResults(
+/**
+ * Check if driver is initialized
+ * Useful for debugging and status checks
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_quforia_QuestVuforiaManager_nativeIsDriverInitialized(
     JNIEnv* env, jobject thiz) {
-
-    if (!g_imageTargetTracker) {
-        return env->NewObjectArray(0, env->FindClass("com/quforia/TrackingResult"), nullptr);
-    }
-
-    ImageTargetResult results[10];
-    int count = g_imageTargetTracker->getTrackedTargets(results, 10);
-
-    jclass resultClass = env->FindClass("com/quforia/TrackingResult");
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(Ljava/lang/String;[FI)V");
-
-    jobjectArray resultArray = env->NewObjectArray(count, resultClass, nullptr);
-
-    for (int i = 0; i < count; i++) {
-        jstring name = env->NewStringUTF(results[i].name);
-        jfloatArray matrix = env->NewFloatArray(16);
-        env->SetFloatArrayRegion(matrix, 0, 16, results[i].poseMatrix);
-
-        jobject result = env->NewObject(resultClass, constructor, name, matrix, results[i].status);
-        env->SetObjectArrayElement(resultArray, i, result);
-
-        env->DeleteLocalRef(name);
-        env->DeleteLocalRef(matrix);
-        env->DeleteLocalRef(result);
-    }
-
-    return resultArray;
+    (void)env;   // Unused JNI parameter
+    (void)thiz;  // Unused JNI parameter
+    return (g_driverInstance != nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeLoadModelTargetDatabase(
-    JNIEnv* env, jobject thiz, jstring databasePath) {
-
-    if (!g_modelTargetTracker) {
-        LOGE("Model target tracker not initialized");
-        return JNI_FALSE;
-    }
-
-    const char* path = env->GetStringUTFChars(databasePath, nullptr);
-    bool result = g_modelTargetTracker->loadDatabase(path);
-    env->ReleaseStringUTFChars(databasePath, path);
-
-    return result ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeCreateModelTarget(
-    JNIEnv* env, jobject thiz, jstring targetName, jstring guideViewName) {
-
-    if (!g_modelTargetTracker) {
-        LOGE("Model target tracker not initialized");
-        return JNI_FALSE;
-    }
-
-    const char* name = env->GetStringUTFChars(targetName, nullptr);
-    const char* guideName = guideViewName ? env->GetStringUTFChars(guideViewName, nullptr) : nullptr;
-
-    bool result = g_modelTargetTracker->createTargetObserver(name, guideName);
-
-    env->ReleaseStringUTFChars(targetName, name);
-    if (guideName) env->ReleaseStringUTFChars(guideViewName, guideName);
-
-    return result ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT void JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeDestroyModelTarget(
-    JNIEnv* env, jobject thiz, jstring targetName) {
-
-    if (!g_modelTargetTracker) return;
-
-    const char* name = env->GetStringUTFChars(targetName, nullptr);
-    g_modelTargetTracker->destroyTargetObserver(name);
-    env->ReleaseStringUTFChars(targetName, name);
-}
-
-JNIEXPORT jobjectArray JNICALL
-Java_com_quforia_QuestVuforiaManager_nativeGetModelTargetResults(
-    JNIEnv* env, jobject thiz) {
-
-    if (!g_modelTargetTracker) {
-        return env->NewObjectArray(0, env->FindClass("com/quforia/TrackingResult"), nullptr);
-    }
-
-    ModelTargetResult results[10];
-    int count = g_modelTargetTracker->getTrackedTargets(results, 10);
-
-    jclass resultClass = env->FindClass("com/quforia/TrackingResult");
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(Ljava/lang/String;[FI)V");
-
-    jobjectArray resultArray = env->NewObjectArray(count, resultClass, nullptr);
-
-    for (int i = 0; i < count; i++) {
-        jstring name = env->NewStringUTF(results[i].name);
-        jfloatArray matrix = env->NewFloatArray(16);
-        env->SetFloatArrayRegion(matrix, 0, 16, results[i].poseMatrix);
-
-        jobject result = env->NewObject(resultClass, constructor, name, matrix, results[i].status);
-        env->SetObjectArrayElement(resultArray, i, result);
-
-        env->DeleteLocalRef(name);
-        env->DeleteLocalRef(matrix);
-        env->DeleteLocalRef(result);
-    }
-
-    return resultArray;
-}
-
-}
+} // extern "C"
