@@ -1,0 +1,48 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+android {
+    namespace "com.quforia"
+    compileSdk getProperty("unity.compileSdkVersion") as int
+    buildToolsVersion = getProperty("unity.buildToolsVersion")
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.valueOf(getProperty("unity.javaCompatabilityVersion"))
+        targetCompatibility JavaVersion.valueOf(getProperty("unity.javaCompatabilityVersion"))
+    }
+    
+    kotlinOptions {
+        jvmTarget = JavaVersion.valueOf(getProperty("unity.javaCompatabilityVersion"))
+    }
+    
+    defaultConfig {
+        minSdk getProperty("unity.minSdkVersion") as int
+        targetSdk getProperty("unity.targetSdkVersion") as int
+        
+        ndk {
+            abiFilters.addAll(getProperty("unity.abiFilters").tokenize(','))
+            debugSymbolLevel getProperty("unity.debugSymbolLevel")
+        }
+        
+        versionCode getProperty("unity.versionCode") as int
+        versionName getProperty("unity.versionName")
+        
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}

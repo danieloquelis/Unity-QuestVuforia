@@ -1,0 +1,36 @@
+# Gradle build output
+/build/
+.gradle/
+local.properties
+
+# Gradle wrapper logs
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Generated files
+captures/
+outputs/
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Kotlin/Java
+*.class
+*.log
+
+# Unity Android plugin build artifacts
+*.aar
+*.apk
