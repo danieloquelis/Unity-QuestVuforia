@@ -4,10 +4,8 @@ project(quforia)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(VUFORIA_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../Vuforia_SDK_Android_11.4.4/build")
-
 include_directories(
-    ${VUFORIA_SDK_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 add_library(VuforiaEngine SHARED IMPORTED)

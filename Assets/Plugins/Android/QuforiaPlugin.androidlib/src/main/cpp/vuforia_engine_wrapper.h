@@ -1,7 +1,7 @@
 #pragma once
 
+#include <jni.h>
 #include <VuforiaEngine/VuforiaEngine.h>
-#include <VuforiaEngine/Driver/Driver.h>
 #include <memory>
 #include <string>
 #include <mutex>
@@ -27,7 +27,6 @@ private:
     ~VuforiaEngineWrapper();
 
     VuEngine* engine_ = nullptr;
-    VuforiaDriver::ExternalCamera* externalCamera_ = nullptr;
     bool initialized_ = false;
     std::mutex mutex_;
 };

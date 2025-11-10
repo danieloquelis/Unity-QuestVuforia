@@ -29,10 +29,17 @@ bool ModelTargetTracker::loadDatabase(const char* databasePath) {
     }
 
     VuDatabaseTargetInfoList* targetInfoList = nullptr;
-    VuResult result = vuEngineGetDatabaseTargetInfo(engine_, databasePath, &targetInfoList);
+    if (vuDatabaseTargetInfoListCreate(&targetInfoList) != VU_SUCCESS) {
+        LOGE("Failed to create target info list");
+        return false;
+    }
+
+    VuDatabaseTargetInfoError error;
+    VuResult result = vuEngineGetDatabaseTargetInfo(engine_, databasePath, targetInfoList, &error);
 
     if (result != VU_SUCCESS) {
-        LOGE("Failed to load database: %s", databasePath);
+        LOGE("Failed to load database: %s, error: %d", databasePath, error);
+        vuDatabaseTargetInfoListDestroy(targetInfoList);
         return false;
     }
 
@@ -74,7 +81,6 @@ bool ModelTargetTracker::createTargetObserver(const char* targetName, const char
         return false;
     }
 
-    vuObserverListAdd(observers_, observer);
     LOGI("Created model target observer: %s", targetName);
     return true;
 }
@@ -95,8 +101,7 @@ void ModelTargetTracker::destroyTargetObserver(const char* targetName) {
         vuModelTargetObserverGetTargetName(observer, &obsTargetName);
 
         if (obsTargetName && strcmp(obsTargetName, targetName) == 0) {
-            vuObserverListRemove(observers_, observer);
-            vuEngineDestroyObserver(engine_, observer);
+            vuObserverDestroy(observer);
             LOGI("Destroyed model target observer: %s", targetName);
             return;
         }
@@ -115,11 +120,10 @@ void ModelTargetTracker::destroyAllObservers() {
         VuObserver* observer = nullptr;
         vuObserverListGetElement(observers_, i, &observer);
         if (observer) {
-            vuEngineDestroyObserver(engine_, observer);
+            vuObserverDestroy(observer);
         }
     }
 
-    vuObserverListClear(observers_);
     LOGI("Destroyed all model target observers");
 }
 
@@ -136,7 +140,16 @@ int ModelTargetTracker::getTrackedTargets(ModelTargetResult* results, int maxRes
     }
 
     VuObservationList* observations = nullptr;
-    vuStateGetObservations(state, &observations);
+    if (vuObservationListCreate(&observations) != VU_SUCCESS) {
+        vuStateRelease(state);
+        return 0;
+    }
+
+    if (vuStateGetObservations(state, observations) != VU_SUCCESS) {
+        vuObservationListDestroy(observations);
+        vuStateRelease(state);
+        return 0;
+    }
 
     int32_t numObservations = 0;
     vuObservationListGetSize(observations, &numObservations);
@@ -149,43 +162,42 @@ int ModelTargetTracker::getTrackedTargets(ModelTargetResult* results, int maxRes
         VuObservationType obsType;
         vuObservationGetType(observation, &obsType);
 
-        if (obsType != VU_OBSERVATION_TYPE_MODEL_TARGET) {
+        if (obsType != VU_OBSERVATION_MODEL_TARGET_TYPE) {
             continue;
-        }
-
-        VuModelTargetObservationStatusInfo statusInfo;
-        if (vuModelTargetObservationGetStatusInfo(observation, &statusInfo) != VU_SUCCESS) {
-            continue;
-        }
-
-        if (statusInfo.status != VU_MODEL_TARGET_STATUS_TRACKED &&
-            statusInfo.status != VU_MODEL_TARGET_STATUS_EXTENDED_TRACKED) {
-            continue;
-        }
-
-        VuObserver* observer = nullptr;
-        vuObservationGetObserver(observation, &observer);
-
-        const char* targetName = nullptr;
-        vuModelTargetObserverGetTargetName(observer, &targetName);
-
-        if (targetName) {
-            strncpy(results[resultCount].name, targetName, sizeof(results[resultCount].name) - 1);
-            results[resultCount].name[sizeof(results[resultCount].name) - 1] = '\0';
         }
 
         VuPoseInfo poseInfo;
-        if (vuObservationGetPoseInfo(observation, &poseInfo) == VU_SUCCESS) {
-            const float* matrix = poseInfo.pose.data;
-            for (int j = 0; j < 16; j++) {
-                results[resultCount].poseMatrix[j] = matrix[j];
-            }
+        if (vuObservationGetPoseInfo(observation, &poseInfo) != VU_SUCCESS) {
+            continue;
         }
 
-        results[resultCount].status = statusInfo.status;
+        if (poseInfo.poseStatus != VU_OBSERVATION_POSE_STATUS_TRACKED &&
+            poseInfo.poseStatus != VU_OBSERVATION_POSE_STATUS_EXTENDED_TRACKED) {
+            continue;
+        }
+
+        VuModelTargetObservationTargetInfo targetInfo;
+        if (vuModelTargetObservationGetTargetInfo(observation, &targetInfo) == VU_SUCCESS && targetInfo.name) {
+            strncpy(results[resultCount].name, targetInfo.name, sizeof(results[resultCount].name) - 1);
+            results[resultCount].name[sizeof(results[resultCount].name) - 1] = '\0';
+        }
+
+        const float* matrix = poseInfo.pose.data;
+        for (int j = 0; j < 16; j++) {
+            results[resultCount].poseMatrix[j] = matrix[j];
+        }
+
+        VuModelTargetObservationStatusInfo statusInfo;
+        if (vuModelTargetObservationGetStatusInfo(observation, &statusInfo) == VU_SUCCESS) {
+            results[resultCount].status = statusInfo;
+        } else {
+            results[resultCount].status = 0;
+        }
+
         resultCount++;
     }
 
+    vuObservationListDestroy(observations);
     vuStateRelease(state);
     return resultCount;
 }
