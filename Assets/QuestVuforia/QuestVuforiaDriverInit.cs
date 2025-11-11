@@ -103,17 +103,17 @@ public class QuestVuforiaDriverInit : MonoBehaviour
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[QuestVuforiaDriverInit] {message}");
+            Debug.Log($"[QUFORIA] {message}");
         }
     }
 
     private void LogWarning(string message)
     {
-        Debug.LogWarning($"[QuestVuforiaDriverInit] {message}");
+        Debug.LogWarning($"[QUFORIA] {message}");
     }
 
     private void LogError(string message)
     {
-        Debug.LogError($"[QuestVuforiaDriverInit] {message}");
+        Debug.LogError($"[QUFORIA] {message}");
     }
 }

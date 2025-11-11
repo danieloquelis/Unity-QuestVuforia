@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using Meta.XR;
 using UnityEngine;
+using UnityEngine.Android;
 
 /// <summary>
 /// Provides camera frames and device poses to the Vuforia Driver Framework.
@@ -20,6 +21,7 @@ public class MetaCameraProvider : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
     [SerializeField] private bool showFrameStats = true;
+    [SerializeField] private float statsInterval = 1.0f;  // Log stats every N seconds
 
     private Texture2D frameTexture;
     private byte[] imageDataRGB;
@@ -44,6 +46,17 @@ public class MetaCameraProvider : MonoBehaviour
             return;
         }
 
+        // Check Android camera permissions
+        if (!Permission.HasUserAuthorizedPermission("horizonos.permission.HEADSET_CAMERA"))
+        {
+            LogWarning("HEADSET_CAMERA permission not granted. Requesting...");
+            Permission.RequestUserPermission("horizonos.permission.HEADSET_CAMERA");
+        }
+        else
+        {
+            Log("HEADSET_CAMERA permission already granted");
+        }
+
         if (autoStart)
         {
             StartCoroutine(InitializeCamera());
@@ -60,18 +73,77 @@ public class MetaCameraProvider : MonoBehaviour
 
         Log("Initializing PassthroughCameraAccess...");
 
+        // Check if cameraAccess component exists
+        if (cameraAccess == null)
+        {
+            LogError("PassthroughCameraAccess component is null! Check Inspector assignment.");
+            yield break;
+        }
+
+        // Log detailed state
+        Log($"PassthroughCameraAccess initial state:");
+        Log($"  - enabled: {cameraAccess.enabled}");
+        Log($"  - isPlaying: {cameraAccess.IsPlaying}");
+        Log($"  - gameObject.activeInHierarchy: {cameraAccess.gameObject.activeInHierarchy}");
+        Log($"  - gameObject.activeSelf: {cameraAccess.gameObject.activeSelf}");
+        Log($"  - component name: {cameraAccess.GetType().Name}");
+
+        try
+        {
+            var currentResolution = cameraAccess.CurrentResolution;
+            Log($"  - CurrentResolution: {currentResolution.x}x{currentResolution.y}");
+        }
+        catch (Exception e)
+        {
+            Log($"  - CurrentResolution: ERROR - {e.Message}");
+        }
+
         // Enable the PassthroughCameraAccess component
         if (!cameraAccess.enabled)
         {
+            Log("Enabling PassthroughCameraAccess component...");
             cameraAccess.enabled = true;
-            Log("PassthroughCameraAccess enabled");
+
+            // Wait a frame for enable to take effect
+            yield return null;
+
+            Log($"After enable: enabled={cameraAccess.enabled}, isPlaying={cameraAccess.IsPlaying}");
+        }
+        else
+        {
+            Log("PassthroughCameraAccess was already enabled");
         }
 
-        // Wait until camera is playing
-        // Texture may be black for first few frames but is already safe to use
+        // Also ensure GameObject is active
+        if (!cameraAccess.gameObject.activeInHierarchy)
+        {
+            LogWarning("PassthroughCameraAccess GameObject is not active! Activating...");
+            cameraAccess.gameObject.SetActive(true);
+            yield return null;
+        }
+
+        // Wait until camera is playing (with timeout)
+        float timeout = 10.0f;  // 10 second timeout
+        float elapsed = 0f;
+
+        Log("Waiting for PassthroughCameraAccess.IsPlaying...");
         while (!cameraAccess.IsPlaying)
         {
             yield return null;
+            elapsed += Time.deltaTime;
+
+            if (elapsed >= timeout)
+            {
+                LogError($"Timeout waiting for PassthroughCameraAccess to start! IsPlaying={cameraAccess.IsPlaying}, enabled={cameraAccess.enabled}");
+                LogError("Make sure PassthroughCameraAccess is properly added to your scene as a GameObject with the component attached.");
+                yield break;
+            }
+
+            // Log every 2 seconds while waiting
+            if ((int)elapsed % 2 == 0 && elapsed - Time.deltaTime < (int)elapsed)
+            {
+                Log($"Still waiting... (elapsed: {elapsed:F1}s, IsPlaying={cameraAccess.IsPlaying})");
+            }
         }
 
         Log("PassthroughCameraAccess is now playing");
@@ -154,10 +226,10 @@ public class MetaCameraProvider : MonoBehaviour
             }
 
             // Update FPS stats
-            if (showFrameStats && Time.time - lastStatsTime >= 1.0f)
+            if (showFrameStats && Time.time - lastStatsTime >= statsInterval)
             {
                 currentFPS = framesProcessed / (Time.time - lastStatsTime);
-                Log($"Camera FPS: {currentFPS:F1}, Total frames: {frameCount}");
+                Log($"MetaCameraProvider: Processed {framesProcessed} frames at {currentFPS:F1} FPS (Total: {frameCount})");
                 lastStatsTime = Time.time;
                 framesProcessed = 0;
             }
@@ -274,24 +346,17 @@ public class MetaCameraProvider : MonoBehaviour
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[MetaCameraProvider] {message}");
+            Debug.Log($"[QUFORIA] {message}");
         }
     }
 
     private void LogWarning(string message)
     {
-        Debug.LogWarning($"[MetaCameraProvider] {message}");
+        Debug.LogWarning($"[QUFORIA] {message}");
     }
 
     private void LogError(string message)
     {
-        Debug.LogError($"[MetaCameraProvider] {message}");
+        Debug.LogError($"[QUFORIA] {message}");
     }
-
-    // Public getters
-    public bool IsRunning => isRunning;
-    public int FrameCount => frameCount;
-    public float CurrentFPS => currentFPS;
-    public int Width => width;
-    public int Height => height;
 }

@@ -1,53 +1,35 @@
 using System;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
 /// Bridge between Unity C# and native Vuforia Driver Framework.
-/// Simplified API for Driver Framework - only handles frame/pose feeding.
+/// Directly calls C++ functions via P/Invoke (no Kotlin layer needed).
 /// All Vuforia initialization and target tracking is handled by Vuforia Unity SDK.
 /// </summary>
 public static class QuestVuforiaBridge
 {
-    private static AndroidJavaObject plugin;
-    private static readonly object lockObject = new object();
+    private const string LibraryName = "quforia";
 
-    private static AndroidJavaObject Plugin
-    {
-        get
-        {
-            if (plugin == null)
-            {
-                lock (lockObject)
-                {
-                    if (plugin == null)
-                    {
-                        InitializePlugin();
-                    }
-                }
-            }
-            return plugin;
-        }
-    }
+    // =============================================================================
+    // Native Function Declarations (P/Invoke)
+    // =============================================================================
 
-    private static void InitializePlugin()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        try
-        {
-            using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            plugin = new AndroidJavaObject("com.quforia.QuestVuforiaManager", activity);
-            Debug.Log("[QuestVuforiaBridge] Plugin initialized successfully");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[QuestVuforiaBridge] Failed to initialize plugin: {e.Message}");
-            throw;
-        }
-#else
-        Debug.LogWarning("[QuestVuforiaBridge] Running in editor - plugin not available");
-#endif
-    }
+    [DllImport(LibraryName)]
+    private static extern bool nativeSetCameraIntrinsics(float[] intrinsics, int length);
+
+    [DllImport(LibraryName)]
+    private static extern bool nativeFeedDevicePose(float[] position, float[] rotation, long timestamp);
+
+    [DllImport(LibraryName)]
+    private static extern bool nativeFeedCameraFrame(byte[] imageData, int width, int height, float[] intrinsics, int intrinsicsLength, long timestamp);
+
+    [DllImport(LibraryName)]
+    private static extern bool nativeIsDriverInitialized();
+
+    // =============================================================================
+    // Public API Methods
+    // =============================================================================
 
     /// <summary>
     /// Set camera intrinsics (call once at initialization).
@@ -59,25 +41,25 @@ public static class QuestVuforiaBridge
     {
         if (intrinsics == null || intrinsics.Length < 6)
         {
-            Debug.LogError("[QuestVuforiaBridge] Intrinsics array must have at least 6 elements");
+            Debug.LogError("[QUFORIA] Intrinsics array must have at least 6 elements");
             return false;
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
-            return Plugin.Call<bool>("setCameraIntrinsics", intrinsics);
+            bool result = nativeSetCameraIntrinsics(intrinsics, intrinsics.Length);
+            if (result)
+            {
+                Debug.Log($"[QUFORIA] Camera intrinsics set: {intrinsics[0]}x{intrinsics[1]}, " +
+                         $"fx={intrinsics[2]}, fy={intrinsics[3]}, cx={intrinsics[4]}, cy={intrinsics[5]}");
+            }
+            return result;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[QuestVuforiaBridge] SetCameraIntrinsics failed: {e.Message}");
+            Debug.LogError($"[QUFORIA] SetCameraIntrinsics failed: {e.Message}");
             return false;
         }
-#else
-        Debug.Log($"[QuestVuforiaBridge] [Editor] SetCameraIntrinsics: " +
-                 $"{intrinsics[0]}x{intrinsics[1]}, fx={intrinsics[2]}, fy={intrinsics[3]}");
-        return true;
-#endif
     }
 
     /// <summary>
@@ -90,23 +72,18 @@ public static class QuestVuforiaBridge
     /// <returns>True if successful</returns>
     public static bool FeedDevicePose(Vector3 position, Quaternion rotation, long timestamp)
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             float[] positionArray = new float[] { position.x, position.y, position.z };
             float[] rotationArray = new float[] { rotation.x, rotation.y, rotation.z, rotation.w };
 
-            return Plugin.Call<bool>("feedDevicePose", positionArray, rotationArray, timestamp);
+            return nativeFeedDevicePose(positionArray, rotationArray, timestamp);
         }
         catch (Exception e)
         {
-            Debug.LogError($"[QuestVuforiaBridge] FeedDevicePose failed: {e.Message}");
+            Debug.LogError($"[QUFORIA] FeedDevicePose failed: {e.Message}");
             return false;
         }
-#else
-        // Debug.Log($"[QuestVuforiaBridge] [Editor] FeedDevicePose: pos={position}, rot={rotation.eulerAngles}");
-        return true;
-#endif
     }
 
     /// <summary>
@@ -124,32 +101,28 @@ public static class QuestVuforiaBridge
     {
         if (imageData == null)
         {
-            Debug.LogError("[QuestVuforiaBridge] Image data is null");
+            Debug.LogError("[QUFORIA] Image data is null");
             return false;
         }
 
         int expectedSize = width * height * 3;  // RGB888
         if (imageData.Length != expectedSize)
         {
-            Debug.LogError($"[QuestVuforiaBridge] Image data size mismatch: " +
+            Debug.LogError($"[QUFORIA] Image data size mismatch: " +
                           $"{imageData.Length}, expected {expectedSize}");
             return false;
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
-            return Plugin.Call<bool>("feedCameraFrame", imageData, width, height, intrinsics, timestamp);
+            int intrinsicsLength = (intrinsics != null) ? intrinsics.Length : 0;
+            return nativeFeedCameraFrame(imageData, width, height, intrinsics, intrinsicsLength, timestamp);
         }
         catch (Exception e)
         {
-            Debug.LogError($"[QuestVuforiaBridge] FeedCameraFrame failed: {e.Message}");
+            Debug.LogError($"[QUFORIA] FeedCameraFrame failed: {e.Message}");
             return false;
         }
-#else
-        // Debug.Log($"[QuestVuforiaBridge] [Editor] FeedCameraFrame: {width}x{height}, {imageData.Length} bytes");
-        return true;
-#endif
     }
 
     /// <summary>
@@ -158,48 +131,14 @@ public static class QuestVuforiaBridge
     /// <returns>True if driver is initialized</returns>
     public static bool IsDriverInitialized()
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
-            return Plugin.Call<bool>("isDriverInitialized");
+            return nativeIsDriverInitialized();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[QuestVuforiaBridge] IsDriverInitialized failed: {e.Message}");
+            Debug.LogError($"[QUFORIA] IsDriverInitialized failed: {e.Message}");
             return false;
         }
-#else
-        return true;  // In editor, assume initialized
-#endif
-    }
-
-    /// <summary>
-    /// Dispose of the plugin (called automatically on application quit).
-    /// </summary>
-    public static void Dispose()
-    {
-        lock (lockObject)
-        {
-            if (plugin != null)
-            {
-                try
-                {
-                    plugin.Dispose();
-                    plugin = null;
-                    Debug.Log("[QuestVuforiaBridge] Plugin disposed");
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"[QuestVuforiaBridge] Dispose failed: {e.Message}");
-                }
-            }
-        }
-    }
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void OnRuntimeMethodLoad()
-    {
-        // Reset static fields on domain reload (for play mode)
-        plugin = null;
     }
 }
