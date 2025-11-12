@@ -1,0 +1,67 @@
+# QuforiaPlugin - C++/CMake build artifacts
+
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+lib/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CPackConfig.cmake
+CPackSourceConfig.cmake
+Testing/
+.cmake/
+.cmake/api/
+_deps/
+Makefile
+
+# Ninja
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+
+# Compiled object files
+*.o
+*.obj
+*.lo
+*.la
+*.d
+
+# Libraries and binaries
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exp
+*.pdb
+
+# Coverage / profiling
+*.gcno
+*.gcda
+*.profraw
+*.profdata
+
+# Logs / temp / editor swaps
+*.log
+*.tmp
+*.swp
+*.swo
+
+# IDE/editor configs
+.vscode/
+.idea/
+*.user
+
+# macOS
+.DS_Store
+
