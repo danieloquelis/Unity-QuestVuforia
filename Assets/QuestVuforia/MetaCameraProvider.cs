@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using Meta.XR;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Android;
 
@@ -23,7 +24,6 @@ public class MetaCameraProvider : MonoBehaviour
     [SerializeField] private bool showFrameStats = true;
     [SerializeField] private float statsInterval = 1.0f;  // Log stats every N seconds
 
-    private Texture2D frameTexture;
     private byte[] imageDataRGB;
     private bool isRunning = false;
     private int frameCount = 0;
@@ -155,8 +155,7 @@ public class MetaCameraProvider : MonoBehaviour
 
         Log($"Camera resolution: {width}x{height}");
 
-        // Allocate buffers
-        frameTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
+        // Allocate RGB buffer for frame data
         imageDataRGB = new byte[width * height * 3];  // RGB888
 
         // Get and set camera intrinsics
@@ -240,42 +239,48 @@ public class MetaCameraProvider : MonoBehaviour
 
     private void ProcessCurrentFrame()
     {
-        // Get GPU texture from PassthroughCameraAccess
-        Texture gpuTexture = cameraAccess.GetTexture();
-        if (gpuTexture == null)
+        // CORRECTED: Use GetColors() method as shown in Meta's official PassthroughCameraApiSamples
+        // This is the proper API to get CPU-readable pixel data from PassthroughCameraAccess
+        // Returns NativeArray<Color32> (byte-based RGBA format)
+        NativeArray<Color32> pixels = cameraAccess.GetColors();
+
+        if (!pixels.IsCreated || pixels.Length == 0)
         {
-            LogWarning("GPU texture is null");
+            LogWarning("GetColors() returned invalid or empty NativeArray");
             return;
         }
 
-        // Copy GPU texture to CPU (blocking operation)
-        // Note: This is a performance bottleneck - consider AsyncGPUReadback for production
-        RenderTexture rt = gpuTexture as RenderTexture;
-        if (rt != null)
+        // Verify we got the expected number of pixels
+        int expectedPixels = width * height;
+        if (pixels.Length != expectedPixels)
         {
-            RenderTexture.active = rt;
-            frameTexture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            frameTexture.Apply();
-            RenderTexture.active = null;
-        }
-        else
-        {
-            // Handle Texture2D case
-            Graphics.CopyTexture(gpuTexture, frameTexture);
-        }
-
-        // Get raw RGB bytes
-        byte[] rawData = frameTexture.GetRawTextureData();
-
-        // Ensure correct size
-        if (rawData.Length != imageDataRGB.Length)
-        {
-            LogWarning($"Texture data size mismatch: {rawData.Length} vs expected {imageDataRGB.Length}");
+            LogWarning($"GetColors() returned unexpected pixel count: {pixels.Length} (expected {expectedPixels})");
             return;
         }
 
-        // Copy to our buffer
-        Array.Copy(rawData, imageDataRGB, rawData.Length);
+        // Log every 120 frames for debugging
+        if (frameCount % 120 == 0 && frameCount > 0)
+        {
+            // Sample center pixel to verify we're getting real data
+            int centerIdx = (height / 2) * width + (width / 2);
+            Color32 centerPixel = pixels[centerIdx];
+            Log($"GetColors() returned {pixels.Length} pixels, center pixel: R={centerPixel.r}, G={centerPixel.g}, B={centerPixel.b}");
+        }
+
+        // Convert NativeArray<Color32> to byte[] RGB888 format
+        // Color32 already uses bytes (0-255), just strip the alpha channel
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            int rgbIndex = i * 3;
+            Color32 pixel = pixels[i];
+            imageDataRGB[rgbIndex] = pixel.r;
+            imageDataRGB[rgbIndex + 1] = pixel.g;
+            imageDataRGB[rgbIndex + 2] = pixel.b;
+            // Skip alpha channel (pixel.a)
+        }
+
+        // Flip Y-axis (Unity textures are bottom-up, Vuforia expects top-down)
+        FlipImageVertically(imageDataRGB, width, height);
 
         // Get timestamp from PassthroughCameraAccess (convert DateTime to nanoseconds)
         DateTime timestamp = cameraAccess.Timestamp;
@@ -303,12 +308,6 @@ public class MetaCameraProvider : MonoBehaviour
         if (cameraAccess != null && cameraAccess.enabled)
         {
             cameraAccess.enabled = false;
-        }
-
-        if (frameTexture != null)
-        {
-            Destroy(frameTexture);
-            frameTexture = null;
         }
 
         Log("Camera stopped");
@@ -339,6 +338,27 @@ public class MetaCameraProvider : MonoBehaviour
                 cameraAccess.enabled = true;
                 Log("Camera resumed");
             }
+        }
+    }
+
+    /// <summary>
+    /// Flips image vertically in place (Unity textures are bottom-up, Vuforia expects top-down).
+    /// </summary>
+    private void FlipImageVertically(byte[] imageData, int width, int height)
+    {
+        int bytesPerPixel = 3; // RGB888
+        int stride = width * bytesPerPixel;
+        byte[] rowBuffer = new byte[stride];
+
+        for (int row = 0; row < height / 2; row++)
+        {
+            int topRowOffset = row * stride;
+            int bottomRowOffset = (height - 1 - row) * stride;
+
+            // Swap rows
+            System.Array.Copy(imageData, topRowOffset, rowBuffer, 0, stride);
+            System.Array.Copy(imageData, bottomRowOffset, imageData, topRowOffset, stride);
+            System.Array.Copy(rowBuffer, 0, imageData, bottomRowOffset, stride);
         }
     }
 

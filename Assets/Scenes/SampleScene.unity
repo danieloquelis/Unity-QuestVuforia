@@ -1358,7 +1358,7 @@ MonoBehaviour:
   cameraAccess: {fileID: 1573155593}
   autoStart: 1
   enableDebugLogs: 1
-  showFrameStats: 0
+  showFrameStats: 1
   statsInterval: 1
 --- !u!114 &1364039412
 MonoBehaviour:
@@ -1515,6 +1515,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1573155594}
   - component: {fileID: 1573155593}
+  - component: {fileID: 1573155595}
   m_Layer: 0
   m_Name: PassthroughCameraAccess
   m_TagString: Untagged
@@ -1553,6 +1554,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1573155595
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1573155592}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c8d8ea3c0fddf472b8c7ddf415e3c055, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1602455436
 GameObject:
   m_ObjectHideFlags: 0

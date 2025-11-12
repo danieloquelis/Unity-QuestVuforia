@@ -10,8 +10,8 @@ using Vuforia;
 public class QuestVuforiaDriverInit : MonoBehaviour
 {
     [Header("Driver Configuration")]
-    [Tooltip("Name of the native driver library")]
-    [SerializeField] private string driverLibraryName = "libquforia.so";
+    [Tooltip("Name of the native driver library (without lib prefix and .so extension)")]
+    [SerializeField] private string driverLibraryName = "quforia";
 
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
