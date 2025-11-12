@@ -16,6 +16,10 @@ public class MetaCameraProvider : MonoBehaviour
     [Tooltip("PassthroughCameraAccess component (add to scene and assign here)")]
     [SerializeField] private PassthroughCameraAccess cameraAccess;
 
+    [Header("Tracking Origin")]
+    [Tooltip("Reference point for coordinate system (usually CenterEyeAnchor or tracking origin)")]
+    [SerializeField] private Transform trackingOrigin;
+
     [Header("Settings")]
     [SerializeField] private bool autoStart = true;
 
@@ -286,10 +290,36 @@ public class MetaCameraProvider : MonoBehaviour
         DateTime timestamp = cameraAccess.Timestamp;
         long timestampNs = timestamp.Ticks * 100; // Convert .NET ticks (100ns) to nanoseconds
 
-        // Get camera pose from PassthroughCameraAccess
+        // Get camera pose from PassthroughCameraAccess (in Unity world space)
         Pose cameraPose = cameraAccess.GetCameraPose();
-        Vector3 cameraPosition = cameraPose.position;
-        Quaternion cameraRotation = cameraPose.rotation;
+
+        // Transform pose to be relative to tracking origin (if assigned)
+        Vector3 cameraPosition;
+        Quaternion cameraRotation;
+
+        if (trackingOrigin != null)
+        {
+            // Transform camera pose to be relative to tracking origin
+            // This ensures Vuforia tracking results align with Unity's coordinate system
+            cameraPosition = trackingOrigin.InverseTransformPoint(cameraPose.position);
+            cameraRotation = Quaternion.Inverse(trackingOrigin.rotation) * cameraPose.rotation;
+
+            if (frameCount % 120 == 0 && frameCount > 0)
+            {
+                Log($"Camera relative to origin: pos={cameraPosition}, rot={cameraRotation.eulerAngles}");
+            }
+        }
+        else
+        {
+            // Use absolute world space pose (may cause offset issues)
+            cameraPosition = cameraPose.position;
+            cameraRotation = cameraPose.rotation;
+
+            if (frameCount == 1)
+            {
+                LogWarning("trackingOrigin not assigned! Tracked objects may have large position offset. Assign CenterEyeAnchor or OVRCameraRig to fix this.");
+            }
+        }
 
         // Feed pose FIRST, then frame (CRITICAL for Driver Framework)
         QuestVuforiaBridge.FeedDevicePose(cameraPosition, cameraRotation, timestampNs);
