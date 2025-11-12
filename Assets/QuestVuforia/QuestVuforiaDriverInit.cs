@@ -3,84 +3,45 @@ using UnityEngine;
 using Vuforia;
 
 /// <summary>
-/// Initializes Vuforia with the Quest Vuforia Driver Framework.
-/// This script must run before Vuforia is initialized (use Script Execution Order).
+/// Initializes Vuforia with the Quest custom driver.
+/// Requires delayed initialization enabled in VuforiaConfiguration.
 /// </summary>
-[DefaultExecutionOrder(-100)]  // Execute before default scripts
+[DefaultExecutionOrder(-100)]
 public class QuestVuforiaDriverInit : MonoBehaviour
 {
-    [Header("Driver Configuration")]
-    [Tooltip("Name of the native driver library (without lib prefix and .so extension)")]
     [SerializeField] private string driverLibraryName = "quforia";
-
-    [Header("Debug")]
-    [SerializeField] private bool enableDebugLogs = true;
-
-    private bool isInitialized = false;
-
-    private void Awake()
-    {
-        Log("QuestVuforiaDriverInit Awake");
-
-        // Ensure Vuforia is configured for delayed initialization
-        var config = VuforiaConfiguration.Instance;
-        if (config == null)
-        {
-            LogError("VuforiaConfiguration not found! Please ensure Vuforia is properly imported.");
-            return;
-        }
-
-        if (!config.Vuforia.DelayedInitialization)
-        {
-            LogWarning("DelayedInitialization is not enabled in VuforiaConfiguration. " +
-                      "Driver Framework requires delayed initialization. Please enable it in Vuforia Configuration.");
-        }
-    }
+    [SerializeField] private bool enableDebugLogs = false;
 
     private void Start()
     {
-        Log("QuestVuforiaDriverInit Start");
         InitializeVuforiaWithDriver();
     }
 
     private void InitializeVuforiaWithDriver()
     {
-        if (isInitialized)
-        {
-            Log("Already initialized");
-            return;
-        }
-
         try
         {
             Log($"Initializing Vuforia with driver: {driverLibraryName}");
 
-            // Register for initialization callback
             VuforiaApplication.Instance.OnVuforiaInitialized += OnVuforiaInitialized;
             VuforiaApplication.Instance.OnVuforiaDeinitialized += OnVuforiaDeinitialized;
-
-            // Initialize Vuforia with the custom driver
-            // The driver library (libquforia.so) will be loaded by Vuforia
             VuforiaApplication.Instance.Initialize(driverLibraryName, IntPtr.Zero);
-
-            isInitialized = true;
-            Log("Vuforia initialization requested with driver");
         }
         catch (Exception e)
         {
-            LogError($"Failed to initialize Vuforia with driver: {e.Message}\n{e.StackTrace}");
+            Debug.LogError($"[Quforia] Driver initialization failed: {e.Message}");
         }
     }
 
-    private void OnVuforiaInitialized(VuforiaInitError initError)
+    private void OnVuforiaInitialized(VuforiaInitError error)
     {
-        if (initError == VuforiaInitError.NONE)
+        if (error == VuforiaInitError.NONE)
         {
-            Log("Vuforia initialized successfully with driver!");
+            Log("Vuforia initialized successfully");
         }
         else
         {
-            LogError($"Vuforia initialization failed with error: {initError}");
+            Debug.LogError($"[Quforia] Initialization error: {error}");
         }
     }
 
@@ -91,7 +52,6 @@ public class QuestVuforiaDriverInit : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Unregister events
         if (VuforiaApplication.Instance != null)
         {
             VuforiaApplication.Instance.OnVuforiaInitialized -= OnVuforiaInitialized;
@@ -103,17 +63,7 @@ public class QuestVuforiaDriverInit : MonoBehaviour
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[QUFORIA] {message}");
+            Debug.Log($"[Quforia] {message}");
         }
-    }
-
-    private void LogWarning(string message)
-    {
-        Debug.LogWarning($"[QUFORIA] {message}");
-    }
-
-    private void LogError(string message)
-    {
-        Debug.LogError($"[QUFORIA] {message}");
     }
 }

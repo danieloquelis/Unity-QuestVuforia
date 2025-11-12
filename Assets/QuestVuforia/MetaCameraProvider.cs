@@ -6,57 +6,46 @@ using UnityEngine;
 using UnityEngine.Android;
 
 /// <summary>
-/// Provides camera frames and device poses to the Vuforia Driver Framework.
-/// Uses Meta Quest's PassthroughCameraAccess component from MRUK (Meta SDK 81+).
+/// Provides camera frames and device poses to Vuforia Driver Framework.
+/// Uses Meta Quest's PassthroughCameraAccess for frame capture.
 /// </summary>
-[DefaultExecutionOrder(-50)]  // Execute after QuestVuforiaDriverInit
+[DefaultExecutionOrder(-50)]
 public class MetaCameraProvider : MonoBehaviour
 {
     [Header("Camera Access")]
-    [Tooltip("PassthroughCameraAccess component (add to scene and assign here)")]
     [SerializeField] private PassthroughCameraAccess cameraAccess;
 
     [Header("Settings")]
     [SerializeField] private bool autoStart = true;
-    [Tooltip("Flip image vertically (test with both enabled/disabled to see which works better)")]
     [SerializeField] private bool flipImageVertically = true;
 
     [Header("Debug")]
-    [SerializeField] private bool enableDebugLogs = true;
-    [SerializeField] private bool showFrameStats = true;
-    [SerializeField] private float statsInterval = 1.0f;  // Log stats every N seconds
+    [SerializeField] private bool enableDebugLogs = false;
+    [SerializeField] private bool showFrameStats = false;
+    [SerializeField] private float statsInterval = 1.0f;
 
     private byte[] imageDataRGB;
     private bool isRunning = false;
     private int frameCount = 0;
     private int width, height;
-
-    // Cached intrinsics
     private float[] cachedIntrinsics;
-    private bool intrinsicsSet = false;
 
     // Frame stats
     private float lastStatsTime;
     private int framesProcessed;
-    private float currentFPS;
 
     private void Start()
     {
         if (cameraAccess == null)
         {
-            LogError("PassthroughCameraAccess component not assigned! Please add it to scene and assign in Inspector.");
+            Debug.LogError("[Quforia] PassthroughCameraAccess not assigned!");
             return;
         }
 
-        // Check Android camera permissions
+        // Request camera permission
         if (!Permission.HasUserAuthorizedPermission("horizonos.permission.HEADSET_CAMERA"))
         {
-            LogWarning("HEADSET_CAMERA permission not granted. Requesting...");
             Permission.RequestUserPermission("horizonos.permission.HEADSET_CAMERA");
-        }
-        else
-        {
-            Log("HEADSET_CAMERA permission already granted");
         }
 
         if (autoStart)
@@ -67,124 +56,52 @@ public class MetaCameraProvider : MonoBehaviour
 
     public IEnumerator InitializeCamera()
     {
-        if (isRunning)
-        {
-            Log("Camera already running");
-            yield break;
-        }
+        if (isRunning) yield break;
 
-        Log("Initializing PassthroughCameraAccess...");
+        Log("Initializing camera...");
 
-        // Check if cameraAccess component exists
-        if (cameraAccess == null)
-        {
-            LogError("PassthroughCameraAccess component is null! Check Inspector assignment.");
-            yield break;
-        }
-
-        // Log detailed state
-        Log($"PassthroughCameraAccess initial state:");
-        Log($"  - enabled: {cameraAccess.enabled}");
-        Log($"  - isPlaying: {cameraAccess.IsPlaying}");
-        Log($"  - gameObject.activeInHierarchy: {cameraAccess.gameObject.activeInHierarchy}");
-        Log($"  - gameObject.activeSelf: {cameraAccess.gameObject.activeSelf}");
-        Log($"  - component name: {cameraAccess.GetType().Name}");
-
-        try
-        {
-            var currentResolution = cameraAccess.CurrentResolution;
-            Log($"  - CurrentResolution: {currentResolution.x}x{currentResolution.y}");
-        }
-        catch (Exception e)
-        {
-            Log($"  - CurrentResolution: ERROR - {e.Message}");
-        }
-
-        // Enable the PassthroughCameraAccess component
         if (!cameraAccess.enabled)
         {
-            Log("Enabling PassthroughCameraAccess component...");
             cameraAccess.enabled = true;
-
-            // Wait a frame for enable to take effect
-            yield return null;
-
-            Log($"After enable: enabled={cameraAccess.enabled}, isPlaying={cameraAccess.IsPlaying}");
-        }
-        else
-        {
-            Log("PassthroughCameraAccess was already enabled");
-        }
-
-        // Also ensure GameObject is active
-        if (!cameraAccess.gameObject.activeInHierarchy)
-        {
-            LogWarning("PassthroughCameraAccess GameObject is not active! Activating...");
-            cameraAccess.gameObject.SetActive(true);
             yield return null;
         }
 
-        // Wait until camera is playing (with timeout)
-        float timeout = 10.0f;  // 10 second timeout
+        // Wait for camera to start (10s timeout)
         float elapsed = 0f;
-
-        Log("Waiting for PassthroughCameraAccess.IsPlaying...");
-        while (!cameraAccess.IsPlaying)
+        while (!cameraAccess.IsPlaying && elapsed < 10f)
         {
             yield return null;
             elapsed += Time.deltaTime;
-
-            if (elapsed >= timeout)
-            {
-                LogError($"Timeout waiting for PassthroughCameraAccess to start! IsPlaying={cameraAccess.IsPlaying}, enabled={cameraAccess.enabled}");
-                LogError("Make sure PassthroughCameraAccess is properly added to your scene as a GameObject with the component attached.");
-                yield break;
-            }
-
-            // Log every 2 seconds while waiting
-            if ((int)elapsed % 2 == 0 && elapsed - Time.deltaTime < (int)elapsed)
-            {
-                Log($"Still waiting... (elapsed: {elapsed:F1}s, IsPlaying={cameraAccess.IsPlaying})");
-            }
         }
 
-        Log("PassthroughCameraAccess is now playing");
+        if (!cameraAccess.IsPlaying)
+        {
+            Debug.LogError("[Quforia] Camera failed to start!");
+            yield break;
+        }
 
-        // Get current resolution
+        // Get resolution and allocate buffer
         Vector2Int resolution = cameraAccess.CurrentResolution;
         width = resolution.x;
         height = resolution.y;
+        imageDataRGB = new byte[width * height * 3];
 
-        Log($"Camera resolution: {width}x{height}");
+        Log($"Camera initialized: {width}x{height}");
 
-        // Allocate RGB buffer for frame data
-        imageDataRGB = new byte[width * height * 3];  // RGB888
-
-        // Get and set camera intrinsics
-        if (!SetupCameraIntrinsics())
-        {
-            LogWarning("Failed to get camera intrinsics");
-        }
+        // Setup intrinsics
+        SetupCameraIntrinsics();
 
         isRunning = true;
         lastStatsTime = Time.time;
-        framesProcessed = 0;
-
-        Log("Camera provider ready, starting frame processing");
-
-        // Start frame processing
         StartCoroutine(ProcessFrames());
     }
 
-    private bool SetupCameraIntrinsics()
+    private void SetupCameraIntrinsics()
     {
         try
         {
-            // Get camera intrinsics from PassthroughCameraAccess component
-            PassthroughCameraAccess.CameraIntrinsics intrinsics = cameraAccess.Intrinsics;
+            var intrinsics = cameraAccess.Intrinsics;
 
-            // Pack intrinsics into array format expected by driver
-            // Format: [width, height, fx, fy, cx, cy, d0-d7]
             cachedIntrinsics = new float[14];
             cachedIntrinsics[0] = width;
             cachedIntrinsics[1] = height;
@@ -192,20 +109,14 @@ public class MetaCameraProvider : MonoBehaviour
             cachedIntrinsics[3] = intrinsics.FocalLength.y;
             cachedIntrinsics[4] = intrinsics.PrincipalPoint.x;
             cachedIntrinsics[5] = intrinsics.PrincipalPoint.y;
-            // Distortion coefficients [6-13] remain 0 (not exposed by PassthroughCameraAccess)
 
-            intrinsicsSet = true;
-            Log($"Camera intrinsics: fx={intrinsics.FocalLength.x:F2}, fy={intrinsics.FocalLength.y:F2}, " +
-                $"cx={intrinsics.PrincipalPoint.x:F2}, cy={intrinsics.PrincipalPoint.y:F2}");
-
-            // Set intrinsics in the driver once
             QuestVuforiaBridge.SetCameraIntrinsics(cachedIntrinsics);
-            return true;
+            Log($"Intrinsics: fx={intrinsics.FocalLength.x:F1}, fy={intrinsics.FocalLength.y:F1}, " +
+                $"cx={intrinsics.PrincipalPoint.x:F1}, cy={intrinsics.PrincipalPoint.y:F1}");
         }
         catch (Exception e)
         {
-            LogError($"Failed to get camera intrinsics: {e.Message}");
-            return false;
+            Debug.LogError($"[Quforia] Failed to get intrinsics: {e.Message}");
         }
     }
 
@@ -222,55 +133,34 @@ public class MetaCameraProvider : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    LogError($"Error processing frame: {e.Message}");
+                    Debug.LogError($"[Quforia] Frame processing error: {e.Message}");
                 }
             }
 
-            // Update FPS stats
+            // Stats logging
             if (showFrameStats && Time.time - lastStatsTime >= statsInterval)
             {
-                currentFPS = framesProcessed / (Time.time - lastStatsTime);
-                Log($"MetaCameraProvider: Processed {framesProcessed} frames at {currentFPS:F1} FPS (Total: {frameCount})");
+                float fps = framesProcessed / (Time.time - lastStatsTime);
+                Log($"Processing: {fps:F1} FPS | Total: {frameCount}");
                 lastStatsTime = Time.time;
                 framesProcessed = 0;
             }
 
-            yield return null;  // Process every frame
+            yield return null;
         }
     }
 
     private void ProcessCurrentFrame()
     {
-        // CORRECTED: Use GetColors() method as shown in Meta's official PassthroughCameraApiSamples
-        // This is the proper API to get CPU-readable pixel data from PassthroughCameraAccess
-        // Returns NativeArray<Color32> (byte-based RGBA format)
+        // Get camera frame pixels
         NativeArray<Color32> pixels = cameraAccess.GetColors();
 
-        if (!pixels.IsCreated || pixels.Length == 0)
+        if (!pixels.IsCreated || pixels.Length != width * height)
         {
-            LogWarning("GetColors() returned invalid or empty NativeArray");
             return;
         }
 
-        // Verify we got the expected number of pixels
-        int expectedPixels = width * height;
-        if (pixels.Length != expectedPixels)
-        {
-            LogWarning($"GetColors() returned unexpected pixel count: {pixels.Length} (expected {expectedPixels})");
-            return;
-        }
-
-        // Log every 120 frames for debugging
-        if (frameCount % 120 == 0 && frameCount > 0)
-        {
-            // Sample center pixel to verify we're getting real data
-            int centerIdx = (height / 2) * width + (width / 2);
-            Color32 centerPixel = pixels[centerIdx];
-            Log($"GetColors() returned {pixels.Length} pixels, center pixel: R={centerPixel.r}, G={centerPixel.g}, B={centerPixel.b}");
-        }
-
-        // Convert NativeArray<Color32> to byte[] RGB888 format
-        // Color32 already uses bytes (0-255), just strip the alpha channel
+        // Convert Color32 to RGB888
         for (int i = 0; i < pixels.Length; i++)
         {
             int rgbIndex = i * 3;
@@ -278,108 +168,67 @@ public class MetaCameraProvider : MonoBehaviour
             imageDataRGB[rgbIndex] = pixel.r;
             imageDataRGB[rgbIndex + 1] = pixel.g;
             imageDataRGB[rgbIndex + 2] = pixel.b;
-            // Skip alpha channel (pixel.a)
         }
 
-        // Optionally flip Y-axis (Unity textures are bottom-up, Vuforia expects top-down)
-        // Test with both enabled/disabled to see which works better for Quest cameras
+        // Flip Y-axis if needed
         if (flipImageVertically)
         {
             FlipImageVertically(imageDataRGB, width, height);
         }
 
-        // Get current timestamp (synchronized for both pose and frame)
+        // Get synchronized timestamp and pose
         DateTime currentTime = DateTime.Now;
-        long currentTimestampNs = currentTime.Ticks * 100; // Convert .NET ticks (100ns) to nanoseconds
-
-        // Get camera pose from PassthroughCameraAccess
+        long timestampNs = currentTime.Ticks * 100;
         Pose cameraPose = cameraAccess.GetCameraPose();
 
-        // EXPERIMENTAL FIX: Send position but identity rotation
-        // Problem: Cube follows camera rotation
-        // Hypothesis: Vuforia uses rotation incorrectly, causing targets to rotate with camera
-        // Solution: Send only positional tracking, ignore rotation
-        Vector3 cameraPosition = cameraPose.position;
-        Quaternion identityRotation = Quaternion.identity; // No rotation
-
-        // Log diagnostics
-        if (frameCount % 120 == 0 && frameCount > 0)
-        {
-            DateTime frameTimestamp = cameraAccess.Timestamp;
-            long frameDelayMs = (currentTime.Ticks - frameTimestamp.Ticks) / 10000; // Convert to ms
-            Log($"Frame delay: {frameDelayMs}ms");
-            Log($"Camera position: {cameraPosition} (rotation ignored)");
-            Log($"Actual camera rotation: {cameraPose.rotation.eulerAngles}");
-        }
-
-        // Feed position only (identity rotation)
-        QuestVuforiaBridge.FeedDevicePose(cameraPosition, identityRotation, currentTimestampNs);
-        QuestVuforiaBridge.FeedCameraFrame(imageDataRGB, width, height, null, currentTimestampNs);
+        // Feed to Vuforia (position only, identity rotation)
+        QuestVuforiaBridge.FeedDevicePose(cameraPose.position, Quaternion.identity, timestampNs);
+        QuestVuforiaBridge.FeedCameraFrame(imageDataRGB, width, height, null, timestampNs);
 
         frameCount++;
+    }
+
+    private void FlipImageVertically(byte[] imageData, int width, int height)
+    {
+        int stride = width * 3;
+        byte[] rowBuffer = new byte[stride];
+
+        for (int row = 0; row < height / 2; row++)
+        {
+            int topRow = row * stride;
+            int bottomRow = (height - 1 - row) * stride;
+
+            Array.Copy(imageData, topRow, rowBuffer, 0, stride);
+            Array.Copy(imageData, bottomRow, imageData, topRow, stride);
+            Array.Copy(rowBuffer, 0, imageData, bottomRow, stride);
+        }
     }
 
     public void StopCamera()
     {
         if (!isRunning) return;
 
-        Log("Stopping camera...");
         isRunning = false;
-
         if (cameraAccess != null && cameraAccess.enabled)
         {
             cameraAccess.enabled = false;
         }
-
         Log("Camera stopped");
     }
 
-    private void OnDestroy()
-    {
-        StopCamera();
-    }
+    private void OnDestroy() => StopCamera();
 
-    private void OnApplicationPause(bool pauseStatus)
+    private void OnApplicationPause(bool isPaused)
     {
         if (cameraAccess == null) return;
 
-        // Pause/resume camera
-        if (pauseStatus)
+        if (isPaused && cameraAccess.enabled)
         {
-            if (cameraAccess.enabled)
-            {
-                cameraAccess.enabled = false;
-                Log("Camera paused");
-            }
+            cameraAccess.enabled = false;
         }
-        else
+        else if (!isPaused && isRunning && !cameraAccess.enabled)
         {
-            if (isRunning && !cameraAccess.enabled)
-            {
-                cameraAccess.enabled = true;
-                Log("Camera resumed");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Flips image vertically in place (Unity textures are bottom-up, Vuforia expects top-down).
-    /// </summary>
-    private void FlipImageVertically(byte[] imageData, int width, int height)
-    {
-        int bytesPerPixel = 3; // RGB888
-        int stride = width * bytesPerPixel;
-        byte[] rowBuffer = new byte[stride];
-
-        for (int row = 0; row < height / 2; row++)
-        {
-            int topRowOffset = row * stride;
-            int bottomRowOffset = (height - 1 - row) * stride;
-
-            // Swap rows
-            System.Array.Copy(imageData, topRowOffset, rowBuffer, 0, stride);
-            System.Array.Copy(imageData, bottomRowOffset, imageData, topRowOffset, stride);
-            System.Array.Copy(rowBuffer, 0, imageData, bottomRowOffset, stride);
+            cameraAccess.enabled = true;
         }
     }
 
@@ -387,17 +236,7 @@ public class MetaCameraProvider : MonoBehaviour
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[QUFORIA] {message}");
+            Debug.Log($"[Quforia] {message}");
         }
-    }
-
-    private void LogWarning(string message)
-    {
-        Debug.LogWarning($"[QUFORIA] {message}");
-    }
-
-    private void LogError(string message)
-    {
-        Debug.LogError($"[QUFORIA] {message}");
     }
 }

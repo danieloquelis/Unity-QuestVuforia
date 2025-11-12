@@ -3,17 +3,11 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
-/// Bridge between Unity C# and native Vuforia Driver Framework.
-/// Directly calls C++ functions via P/Invoke (no Kotlin layer needed).
-/// All Vuforia initialization and target tracking is handled by Vuforia Unity SDK.
+/// Bridge between Unity and native Vuforia Driver Framework via P/Invoke.
 /// </summary>
 public static class QuestVuforiaBridge
 {
     private const string LibraryName = "quforia";
-
-    // =============================================================================
-    // Native Function Declarations (P/Invoke)
-    // =============================================================================
 
     [DllImport(LibraryName)]
     private static extern bool nativeSetCameraIntrinsics(float[] intrinsics, int length);
@@ -27,118 +21,50 @@ public static class QuestVuforiaBridge
     [DllImport(LibraryName)]
     private static extern bool nativeIsDriverInitialized();
 
-    // =============================================================================
-    // Public API Methods
-    // =============================================================================
-
     /// <summary>
-    /// Set camera intrinsics (call once at initialization).
-    /// Intrinsics array format: [width, height, fx, fy, cx, cy, d0-d7]
+    /// Set camera intrinsics: [width, height, fx, fy, cx, cy, d0-d7]
     /// </summary>
-    /// <param name="intrinsics">Camera intrinsics array (at least 6 floats)</param>
-    /// <returns>True if successful</returns>
     public static bool SetCameraIntrinsics(float[] intrinsics)
     {
         if (intrinsics == null || intrinsics.Length < 6)
         {
-            Debug.LogError("[QUFORIA] Intrinsics array must have at least 6 elements");
+            Debug.LogError("[Quforia] Invalid intrinsics array");
             return false;
         }
 
-        try
-        {
-            bool result = nativeSetCameraIntrinsics(intrinsics, intrinsics.Length);
-            if (result)
-            {
-                Debug.Log($"[QUFORIA] Camera intrinsics set: {intrinsics[0]}x{intrinsics[1]}, " +
-                         $"fx={intrinsics[2]}, fy={intrinsics[3]}, cx={intrinsics[4]}, cy={intrinsics[5]}");
-            }
-            return result;
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[QUFORIA] SetCameraIntrinsics failed: {e.Message}");
-            return false;
-        }
+        return nativeSetCameraIntrinsics(intrinsics, intrinsics.Length);
     }
 
     /// <summary>
-    /// Feed device pose to the Vuforia Driver.
-    /// CRITICAL: Must be called BEFORE FeedCameraFrame with the same timestamp.
+    /// Feed device pose to driver. Call BEFORE FeedCameraFrame.
     /// </summary>
-    /// <param name="position">Camera position in world space</param>
-    /// <param name="rotation">Camera rotation (quaternion)</param>
-    /// <param name="timestamp">Frame timestamp in nanoseconds</param>
-    /// <returns>True if successful</returns>
     public static bool FeedDevicePose(Vector3 position, Quaternion rotation, long timestamp)
     {
-        try
-        {
-            float[] positionArray = new float[] { position.x, position.y, position.z };
-            float[] rotationArray = new float[] { rotation.x, rotation.y, rotation.z, rotation.w };
-
-            return nativeFeedDevicePose(positionArray, rotationArray, timestamp);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[QUFORIA] FeedDevicePose failed: {e.Message}");
-            return false;
-        }
+        float[] pos = new float[] { position.x, position.y, position.z };
+        float[] rot = new float[] { rotation.x, rotation.y, rotation.z, rotation.w };
+        return nativeFeedDevicePose(pos, rot, timestamp);
     }
 
     /// <summary>
-    /// Feed camera frame to the Vuforia Driver.
-    /// Must be called AFTER FeedDevicePose with the same timestamp.
+    /// Feed camera frame to driver. Call AFTER FeedDevicePose.
     /// </summary>
-    /// <param name="imageData">RGB image data (width * height * 3 bytes)</param>
-    /// <param name="width">Image width in pixels</param>
-    /// <param name="height">Image height in pixels</param>
-    /// <param name="intrinsics">Optional intrinsics (uses cached if null)</param>
-    /// <param name="timestamp">Frame timestamp in nanoseconds</param>
-    /// <returns>True if successful</returns>
-    public static bool FeedCameraFrame(byte[] imageData, int width, int height,
-                                       float[] intrinsics, long timestamp)
+    public static bool FeedCameraFrame(byte[] imageData, int width, int height, float[] intrinsics, long timestamp)
     {
-        if (imageData == null)
+        if (imageData == null || imageData.Length != width * height * 3)
         {
-            Debug.LogError("[QUFORIA] Image data is null");
+            Debug.LogError("[Quforia] Invalid image data");
             return false;
         }
 
-        int expectedSize = width * height * 3;  // RGB888
-        if (imageData.Length != expectedSize)
-        {
-            Debug.LogError($"[QUFORIA] Image data size mismatch: " +
-                          $"{imageData.Length}, expected {expectedSize}");
-            return false;
-        }
-
-        try
-        {
-            int intrinsicsLength = (intrinsics != null) ? intrinsics.Length : 0;
-            return nativeFeedCameraFrame(imageData, width, height, intrinsics, intrinsicsLength, timestamp);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[QUFORIA] FeedCameraFrame failed: {e.Message}");
-            return false;
-        }
+        int intrinsicsLength = intrinsics?.Length ?? 0;
+        return nativeFeedCameraFrame(imageData, width, height, intrinsics, intrinsicsLength, timestamp);
     }
 
     /// <summary>
-    /// Check if the native driver is initialized and ready.
+    /// Check if native driver is initialized.
     /// </summary>
-    /// <returns>True if driver is initialized</returns>
     public static bool IsDriverInitialized()
     {
-        try
-        {
-            return nativeIsDriverInitialized();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[QUFORIA] IsDriverInitialized failed: {e.Message}");
-            return false;
-        }
+        return nativeIsDriverInitialized();
     }
 }
