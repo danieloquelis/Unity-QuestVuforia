@@ -1332,8 +1332,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraAccess: {fileID: 1573155593}
-  trackingOrigin: {fileID: 1364039407}
   autoStart: 1
+  flipImageVertically: 1
   enableDebugLogs: 1
   showFrameStats: 1
   statsInterval: 1

@@ -16,12 +16,10 @@ public class MetaCameraProvider : MonoBehaviour
     [Tooltip("PassthroughCameraAccess component (add to scene and assign here)")]
     [SerializeField] private PassthroughCameraAccess cameraAccess;
 
-    [Header("Tracking Origin")]
-    [Tooltip("Reference point for coordinate system (usually CenterEyeAnchor or tracking origin)")]
-    [SerializeField] private Transform trackingOrigin;
-
     [Header("Settings")]
     [SerializeField] private bool autoStart = true;
+    [Tooltip("Flip image vertically (test with both enabled/disabled to see which works better)")]
+    [SerializeField] private bool flipImageVertically = true;
 
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
@@ -283,47 +281,40 @@ public class MetaCameraProvider : MonoBehaviour
             // Skip alpha channel (pixel.a)
         }
 
-        // Flip Y-axis (Unity textures are bottom-up, Vuforia expects top-down)
-        FlipImageVertically(imageDataRGB, width, height);
+        // Optionally flip Y-axis (Unity textures are bottom-up, Vuforia expects top-down)
+        // Test with both enabled/disabled to see which works better for Quest cameras
+        if (flipImageVertically)
+        {
+            FlipImageVertically(imageDataRGB, width, height);
+        }
 
-        // Get timestamp from PassthroughCameraAccess (convert DateTime to nanoseconds)
-        DateTime timestamp = cameraAccess.Timestamp;
-        long timestampNs = timestamp.Ticks * 100; // Convert .NET ticks (100ns) to nanoseconds
+        // Get current timestamp (synchronized for both pose and frame)
+        DateTime currentTime = DateTime.Now;
+        long currentTimestampNs = currentTime.Ticks * 100; // Convert .NET ticks (100ns) to nanoseconds
 
-        // Get camera pose from PassthroughCameraAccess (in Unity world space)
+        // Get camera pose from PassthroughCameraAccess
         Pose cameraPose = cameraAccess.GetCameraPose();
 
-        // Transform pose to be relative to tracking origin (if assigned)
-        Vector3 cameraPosition;
-        Quaternion cameraRotation;
+        // EXPERIMENTAL FIX: Send position but identity rotation
+        // Problem: Cube follows camera rotation
+        // Hypothesis: Vuforia uses rotation incorrectly, causing targets to rotate with camera
+        // Solution: Send only positional tracking, ignore rotation
+        Vector3 cameraPosition = cameraPose.position;
+        Quaternion identityRotation = Quaternion.identity; // No rotation
 
-        if (trackingOrigin != null)
+        // Log diagnostics
+        if (frameCount % 120 == 0 && frameCount > 0)
         {
-            // Transform camera pose to be relative to tracking origin
-            // This ensures Vuforia tracking results align with Unity's coordinate system
-            cameraPosition = trackingOrigin.InverseTransformPoint(cameraPose.position);
-            cameraRotation = Quaternion.Inverse(trackingOrigin.rotation) * cameraPose.rotation;
-
-            if (frameCount % 120 == 0 && frameCount > 0)
-            {
-                Log($"Camera relative to origin: pos={cameraPosition}, rot={cameraRotation.eulerAngles}");
-            }
-        }
-        else
-        {
-            // Use absolute world space pose (may cause offset issues)
-            cameraPosition = cameraPose.position;
-            cameraRotation = cameraPose.rotation;
-
-            if (frameCount == 1)
-            {
-                LogWarning("trackingOrigin not assigned! Tracked objects may have large position offset. Assign CenterEyeAnchor or OVRCameraRig to fix this.");
-            }
+            DateTime frameTimestamp = cameraAccess.Timestamp;
+            long frameDelayMs = (currentTime.Ticks - frameTimestamp.Ticks) / 10000; // Convert to ms
+            Log($"Frame delay: {frameDelayMs}ms");
+            Log($"Camera position: {cameraPosition} (rotation ignored)");
+            Log($"Actual camera rotation: {cameraPose.rotation.eulerAngles}");
         }
 
-        // Feed pose FIRST, then frame (CRITICAL for Driver Framework)
-        QuestVuforiaBridge.FeedDevicePose(cameraPosition, cameraRotation, timestampNs);
-        QuestVuforiaBridge.FeedCameraFrame(imageDataRGB, width, height, null, timestampNs);
+        // Feed position only (identity rotation)
+        QuestVuforiaBridge.FeedDevicePose(cameraPosition, identityRotation, currentTimestampNs);
+        QuestVuforiaBridge.FeedCameraFrame(imageDataRGB, width, height, null, currentTimestampNs);
 
         frameCount++;
     }
