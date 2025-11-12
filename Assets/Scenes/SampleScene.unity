@@ -828,6 +828,9 @@ GameObject:
   - component: {fileID: 1086467198}
   - component: {fileID: 1086467199}
   - component: {fileID: 1086467200}
+  - component: {fileID: 1086467203}
+  - component: {fileID: 1086467202}
+  - component: {fileID: 1086467201}
   m_Layer: 0
   m_Name: LeftEyeAnchor
   m_TagString: MainCamera
@@ -945,6 +948,54 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!114 &1086467201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1086467197}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c694b9fc85bdc4a53bb8c88a1aeeee8a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cameraAccess: {fileID: 1573155593}
+  autoStart: 1
+  flipImageVertically: 1
+  useCameraRotation: 1
+  enableDebugLogs: 1
+  showFrameStats: 1
+  showPoseDebug: 1
+  statsInterval: 1
+--- !u!114 &1086467202
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1086467197}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 864f62172618a4cb2bc93e2ec1f12440, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  driverLibraryName: libquforia.so
+  enableDebugLogs: 1
+--- !u!114 &1086467203
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1086467197}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1826476478, guid: 8a9a760f95896c34689febc965510927, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mWorldCenterMode: 2
+  mWorldCenter: {fileID: 0}
 --- !u!1 &1098815418
 GameObject:
   m_ObjectHideFlags: 0
@@ -1037,7 +1088,7 @@ Transform:
   m_GameObject: {fileID: 1233800057}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.0294, z: 0}
+  m_LocalPosition: {x: 0, y: 0.0252, z: 0}
   m_LocalScale: {x: 0.05, y: 0.05, z: 0.05}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -1191,9 +1242,6 @@ GameObject:
   - component: {fileID: 1364039409}
   - component: {fileID: 1364039408}
   - component: {fileID: 1364039410}
-  - component: {fileID: 1364039413}
-  - component: {fileID: 1364039412}
-  - component: {fileID: 1364039411}
   m_Layer: 0
   m_Name: CenterEyeAnchor
   m_TagString: MainCamera
@@ -1319,52 +1367,6 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
---- !u!114 &1364039411
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1364039406}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c694b9fc85bdc4a53bb8c88a1aeeee8a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  cameraAccess: {fileID: 1573155593}
-  autoStart: 1
-  flipImageVertically: 1
-  enableDebugLogs: 1
-  showFrameStats: 1
-  statsInterval: 1
---- !u!114 &1364039412
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1364039406}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 864f62172618a4cb2bc93e2ec1f12440, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  driverLibraryName: libquforia.so
-  enableDebugLogs: 1
---- !u!114 &1364039413
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1364039406}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: -1826476478, guid: 8a9a760f95896c34689febc965510927, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mWorldCenterMode: 2
-  mWorldCenter: {fileID: 0}
 --- !u!1 &1557954670
 GameObject:
   m_ObjectHideFlags: 0
@@ -1492,7 +1494,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1573155594}
   - component: {fileID: 1573155593}
-  - component: {fileID: 1573155595}
   m_Layer: 0
   m_Name: PassthroughCameraAccess
   m_TagString: Untagged
@@ -1525,24 +1526,12 @@ Transform:
   m_GameObject: {fileID: 1573155592}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.089396484, y: -0.22339796, z: 0.13898169}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1573155595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1573155592}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8d8ea3c0fddf472b8c7ddf415e3c055, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &1602455436
 GameObject:
   m_ObjectHideFlags: 0

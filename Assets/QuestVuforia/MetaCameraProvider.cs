@@ -18,10 +18,12 @@ public class MetaCameraProvider : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private bool autoStart = true;
     [SerializeField] private bool flipImageVertically = true;
+    [SerializeField] private bool useCameraRotation = false;
 
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = false;
     [SerializeField] private bool showFrameStats = false;
+    [SerializeField] private bool showPoseDebug = false;
     [SerializeField] private float statsInterval = 1.0f;
 
     private byte[] imageDataRGB;
@@ -86,7 +88,13 @@ public class MetaCameraProvider : MonoBehaviour
         height = resolution.y;
         imageDataRGB = new byte[width * height * 3];
 
-        Log($"Camera initialized: {width}x{height}");
+        var sensorRes = cameraAccess.Intrinsics.SensorResolution;
+        Log($"Camera initialized: Current={width}x{height}, Sensor={sensorRes.x}x{sensorRes.y}");
+        if (width != sensorRes.x || height != sensorRes.y)
+        {
+            Debug.LogWarning($"[Quforia] CurrentResolution ({width}x{height}) != SensorResolution ({sensorRes.x}x{sensorRes.y}). " +
+                           "Image may be cropped/scaled. This can cause tracking offset!");
+        }
 
         // Setup intrinsics
         SetupCameraIntrinsics();
@@ -102,17 +110,26 @@ public class MetaCameraProvider : MonoBehaviour
         {
             var intrinsics = cameraAccess.Intrinsics;
 
+            // The intrinsics from Meta are calibrated to SensorResolution
+            // But we're feeding CurrentResolution to Vuforia
+            // We need to scale the intrinsics if there's a resolution mismatch
+            var sensorRes = intrinsics.SensorResolution;
+            float scaleX = (float)width / sensorRes.x;
+            float scaleY = (float)height / sensorRes.y;
+
             cachedIntrinsics = new float[14];
-            cachedIntrinsics[0] = width;
-            cachedIntrinsics[1] = height;
-            cachedIntrinsics[2] = intrinsics.FocalLength.x;
-            cachedIntrinsics[3] = intrinsics.FocalLength.y;
-            cachedIntrinsics[4] = intrinsics.PrincipalPoint.x;
-            cachedIntrinsics[5] = intrinsics.PrincipalPoint.y;
+            cachedIntrinsics[0] = width;  // Use actual frame width
+            cachedIntrinsics[1] = height; // Use actual frame height
+            cachedIntrinsics[2] = intrinsics.FocalLength.x * scaleX;  // Scale focal length
+            cachedIntrinsics[3] = intrinsics.FocalLength.y * scaleY;
+            cachedIntrinsics[4] = intrinsics.PrincipalPoint.x * scaleX;  // Scale principal point
+            cachedIntrinsics[5] = intrinsics.PrincipalPoint.y * scaleY;
+            // Distortion coefficients (6-13) remain 0 (Meta doesn't provide them)
 
             QuestVuforiaBridge.SetCameraIntrinsics(cachedIntrinsics);
-            Log($"Intrinsics: fx={intrinsics.FocalLength.x:F1}, fy={intrinsics.FocalLength.y:F1}, " +
-                $"cx={intrinsics.PrincipalPoint.x:F1}, cy={intrinsics.PrincipalPoint.y:F1}");
+            Log($"Intrinsics scaled: {width}x{height} (from {sensorRes.x}x{sensorRes.y}), " +
+                $"fx={cachedIntrinsics[2]:F1}, fy={cachedIntrinsics[3]:F1}, " +
+                $"cx={cachedIntrinsics[4]:F1}, cy={cachedIntrinsics[5]:F1}");
         }
         catch (Exception e)
         {
@@ -181,8 +198,19 @@ public class MetaCameraProvider : MonoBehaviour
         long timestampNs = currentTime.Ticks * 100;
         Pose cameraPose = cameraAccess.GetCameraPose();
 
-        // Feed to Vuforia (position only, identity rotation)
-        QuestVuforiaBridge.FeedDevicePose(cameraPose.position, Quaternion.identity, timestampNs);
+        // Choose rotation based on setting
+        Quaternion rotation = useCameraRotation ? cameraPose.rotation : Quaternion.identity;
+
+        // Debug pose info
+        if (showPoseDebug && frameCount % 30 == 0)
+        {
+            Debug.Log($"[Quforia] Camera Pose: pos=({cameraPose.position.x:F3}, {cameraPose.position.y:F3}, {cameraPose.position.z:F3}), " +
+                     $"rot=({cameraPose.rotation.x:F3}, {cameraPose.rotation.y:F3}, {cameraPose.rotation.z:F3}, {cameraPose.rotation.w:F3}), " +
+                     $"useCameraRotation={useCameraRotation}");
+        }
+
+        // Feed to Vuforia (pose first, then frame with same timestamp)
+        QuestVuforiaBridge.FeedDevicePose(cameraPose.position, rotation, timestampNs);
         QuestVuforiaBridge.FeedCameraFrame(imageDataRGB, width, height, null, timestampNs);
 
         frameCount++;
