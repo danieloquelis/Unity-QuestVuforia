@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: VuforiaConfiguration
   m_EditorClassIdentifier: 
   vuforia:
-    vuforiaLicenseKey: REDACTED_VUFORIA_LICENSE_KEY
-    ufoLicenseKey: REDACTED_VUFORIA_LICENSE_KEY
+    vuforiaLicenseKey: ""
+    ufoLicenseKey: ""
     delayedInitialization: 1
     cameraFocusModeSetting: 2
     cameraDeviceModeSetting: -1
