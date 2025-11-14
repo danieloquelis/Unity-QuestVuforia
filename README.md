@@ -68,8 +68,6 @@ cd QuforiaPlugin
 2. File → Build Settings → Android
 3. Build and Run to Quest 3
 
-For detailed build instructions, see `CLAUDE.md`.
-
 ## Requirements
 
 - Meta Quest 3 with developer mode enabled
