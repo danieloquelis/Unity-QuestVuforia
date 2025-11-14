@@ -5,7 +5,6 @@
 An experimental Unity project integrating Vuforia Engine AR tracking with Meta Quest 3's passthrough cameras through a custom native driver implementation.
 
 ![Demo](/Media/image-target-demo.gif)
-_Demo video showing Image Target tracking on Quest 3_
 
 ## Overview
 
