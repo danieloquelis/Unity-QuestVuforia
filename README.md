@@ -15,7 +15,6 @@ Quforia bridges Vuforia Engine 11.4.4 with Meta Quest passthrough camera system 
 - Unity 6000.0.61f1
 - Vuforia Engine 11.4.4 (Driver Framework/External Camera API)
 - Meta XR SDK 81.0.0
-- Unity XR OpenXR 1.15.1
 
 ## Current State
 
@@ -31,12 +30,34 @@ Quforia bridges Vuforia Engine 11.4.4 with Meta Quest passthrough camera system 
 - **Position Offset (~4-5cm)**: Tracked objects appear offset from their actual position, despite correct rotation alignment
   - Offset direction flips when switching between left/right cameras
   - Root cause under investigation - likely related to camera lens offset or coordinate system handling
-  - See `POSITION_OFFSET_INVESTIGATION.md` for detailed analysis
 
 ### In Development
 
 - **Model Target Support**: Integration planned but not yet implemented
 - **Position Offset Fix**: Active investigation into coordinate system transformations
+
+## Setup
+
+- Clone this project.
+- Make sure you have a [Vuforia License Key](https://developer.vuforia.com/home) (works with the free tier).
+- Go to Assets/StreamingAssets and create a copy of `VuforiaLicenseKey.text.template` and more the suffix `VuforiaLicenseKey.txt`.
+- Paste your license key in this new file. Now you should have a file named `VuforiaLicenseKey.txt` with the key pasted.
+
+## Running Sample Scenes
+
+**Image Target Sample**
+
+- Create an Image Target Database inside Vuforia Dashboard.
+- Export it into unity.
+- Go to `Assets/Samples/ImageTarget` and open `ImageTargetScene.unity`
+- Find the `GameObject` called `ImageTarget`.
+- Modify the `Database` param within `ImageTargetBehaviour` component and look for your database.
+- Locate your Image Target in the dropdown below.
+- Run sample in your headset.
+
+**Model Target Sample**
+
+_This is currently work in progress_
 
 ## Technical Approach
 
@@ -44,7 +65,7 @@ The project uses a two-layer architecture:
 
 1. **Unity C# Layer**: Captures Quest camera frames via `PassthroughCameraAccess`, extracts RGB data and pose information, and feeds it to the native plugin through P/Invoke bridges.
 
-2. **Native C++ Plugin** (`libquforia.so`): Implements the Vuforia Driver Framework interface, managing camera lifecycle, frame queuing, and coordinate system transformations between Unity/OpenXR (left-handed) and Vuforia CV (right-handed) conventions.
+2. **Native C++ Plugin** (`libquforia.so`): Implements the Vuforia Driver Framework interface, managing camera lifecycle, frame queuing, and coordinate system transformations between Unity/OpenXR and Vuforia CV conventions.
 
 ### Key Challenges
 
@@ -70,9 +91,8 @@ cd QuforiaPlugin
 
 ## Requirements
 
-- Meta Quest 3 with developer mode enabled
-- Unity 6000.0.61f1 or compatible
-- Android NDK (bundled with Unity)
+- Meta SDK 81
+- Unity 6000.0.61f1
 - Vuforia Engine license (free development license available)
 
 ## Project Structure
